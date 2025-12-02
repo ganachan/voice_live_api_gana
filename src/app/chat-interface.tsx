@@ -396,7 +396,7 @@ const customAvatarNames = [
 let intervalId: NodeJS.Timeout | null = null;
 
 const ChatInterface = () => {
-  const [apiKey, setApiKey] = useState("e7728fa2f8df41ec943223b90762f8cd");
+  const [apiKey, setApiKey] = useState("xxxxx");
   const [endpoint, setEndpoint] = useState("https://westus2.api.cognitive.microsoft.com/");
   const [entraToken, setEntraToken] = useState("");
   const clientAuth = useRef<
@@ -981,7 +981,7 @@ Always personalize your responses and provide value-driven insights based on the
         bottom_right: [1360, 1080],
       },
       background: {
-        image_url: new URL("https://mariagana.blob.core.windows.net/test/AI-GBB-Avatar-2026.png")
+        image_url: new URL("xxxxx.png")
       }
     };
 
