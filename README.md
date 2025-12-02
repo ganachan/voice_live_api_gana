@@ -53,19 +53,3 @@ http://localhost:3000
 
 docker build -t voice-live-app .
 docker run -p 3000:3000 voice-live-app
-
-Extensibility
-
-You can extend this project by adding:
-
-Custom industry prompts
-
-Avatar video integration
-
-MCP Zero Tool Discovery
-
-Real-time analytics dashboards
-
-Memory-based agent workflows
-
-Multi-agent orchestration through SK or Autogen
