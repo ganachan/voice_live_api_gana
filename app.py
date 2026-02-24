@@ -10,7 +10,7 @@ import secrets
 logger = logging.getLogger(__name__)
 
 # Password protection settings
-REQUIRED_PASSWORD = "ai-gbb-2026"
+REQUIRED_PASSWORD = "your_passwd"
 # Generate a secret key for session management
 SECRET_KEY = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 
