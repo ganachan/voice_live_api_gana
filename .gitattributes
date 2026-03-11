@@ -1,1 +1,12 @@
+# Force LF line endings for all text files
+* text=auto eol=lf
+
+# Binary files
 *.woff filter=lfs diff=lfs merge=lfs -text
+*.tgz binary
+*.png binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
