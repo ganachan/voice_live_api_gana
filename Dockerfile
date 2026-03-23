@@ -22,7 +22,7 @@ RUN tdnf distro-sync -y && \
     tdnf install -y jq && \
     tdnf clean all
 
-COPY --from=web-builder /aoai-realtime-audio-sdk/javascript/standalone/rt-client-0.5.2.tgz /web/rt-client-0.5.2.tgz
+COPY rt-client-0.5.2.tgz /web/rt-client-0.5.2.tgz
 
 WORKDIR /web
 COPY package*.json ./
@@ -40,7 +40,7 @@ RUN tdnf distro-sync -y && \
 COPY --from=web /web/out /web/out
 COPY app.py /web/app.py
 
-RUN --mount=type=cache,target=/root/.cache/pip pip install aiohttp azure-identity "azure-ai-agents"
+RUN --mount=type=cache,target=/root/.cache/pip pip install aiohttp azure-identity "azure-ai-agents" python-dotenv
 
 WORKDIR /web
 

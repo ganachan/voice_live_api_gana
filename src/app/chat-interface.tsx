@@ -396,8 +396,8 @@ const customAvatarNames = [
 let intervalId: NodeJS.Timeout | null = null;
 
 const ChatInterface = () => {
-  const [apiKey, setApiKey] = useState("xxxxx");
-  const [endpoint, setEndpoint] = useState("https://westus2.api.cognitive.microsoft.com/");
+  const [apiKey, setApiKey] = useState("");
+  const [endpoint, setEndpoint] = useState("");
   const [entraToken, setEntraToken] = useState("");
   const clientAuth = useRef<
     | {
@@ -480,11 +480,16 @@ const ChatInterface = () => {
 
   const isEnableAvatar = isAvatar && (avatarName || customAvatarName);
 
+  // Backend URL for /config endpoint — set via NEXT_PUBLIC_BACKEND_URL at build time for SWA deployments
+  const configUrl = process.env.NEXT_PUBLIC_BACKEND_URL
+    ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/config`
+    : "/config";
+
   // Fetch configuration from /config endpoint when component loads
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const response = await fetch("/config");
+        const response = await fetch(configUrl);
         if (response.status === 404) {
           setConfigLoaded(true);
           return;
@@ -496,6 +501,9 @@ const ChatInterface = () => {
         }
         if (config.token) {
           setEntraToken(config.token);
+        }
+        if (config.deployment) {
+          setModel(config.deployment);
         }
         // Updated to use industry_scenarios instead of pre_defined_scenarios
         if (config.industry_scenarios) {
@@ -820,16 +828,25 @@ Always personalize your responses and provide value-driven insights based on the
         setIsConnecting(true);
 
         // Refresh the token before connecting
+        let currentEndpoint = endpoint;
+        let currentToken = entraToken;
+        let currentModel = model;
         if (configLoaded) {
           try {
-            const response = await fetch("/config");
+            const response = await fetch(configUrl);
             if (response.ok) {
               const config = await response.json();
               if (config.endpoint) {
+                currentEndpoint = config.endpoint;
                 setEndpoint(config.endpoint);
               }
               if (config.token) {
+                currentToken = config.token;
                 setEntraToken(config.token);
+              }
+              if (config.deployment) {
+                currentModel = config.deployment;
+                setModel(config.deployment);
               }
             }
           } catch (error) {
@@ -838,12 +855,23 @@ Always personalize your responses and provide value-driven insights based on the
           }
         }
 
+        if (!currentEndpoint) {
+          setMessages((prevMessages) => [
+            ...prevMessages,
+            {
+              type: "error",
+              content: "Endpoint is not configured. Set AZURE_OPENAI_ENDPOINT in your .env file.",
+            },
+          ]);
+          return;
+        }
+
         // Use agent fields if in agent mode
-        clientAuth.current = entraToken
+        clientAuth.current = currentToken
           ? {
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
             getToken: async (_: string) => ({
-              token: entraToken,
+              token: currentToken,
               expiresOnTimestamp: Date.now() + 3600000,
               }),
             }
@@ -859,7 +887,7 @@ Always personalize your responses and provide value-driven insights based on the
           return;
         }
         clientRef.current = new RTClient(
-          new URL(endpoint),
+          new URL(currentEndpoint),
           clientAuth.current,
           mode === "agent"
             ? {
@@ -980,9 +1008,6 @@ Always personalize your responses and provide value-driven insights based on the
         top_left: [560, 0],
         bottom_right: [1360, 1080],
       },
-      background: {
-        image_url: new URL("xxxxx.png")
-      }
     };
 
     if (isCustomAvatar && customAvatarName) {
@@ -1005,8 +1030,9 @@ Always personalize your responses and provide value-driven insights based on the
   const disconnect = async () => {
     if (clientRef.current) {
       try {
-        await clientRef.current.close();
+        const client = clientRef.current;
         clientRef.current = null;
+        await client.close();
         peerConnection = null as unknown as RTCPeerConnection;
         setIsConnected(false);
         audioHandlerRef.current?.stopStreamingPlayback();
