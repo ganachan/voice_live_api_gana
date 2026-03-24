@@ -35,6 +35,26 @@ Each industry uses a **direct system prompt** such as:
 
 ## 🛠️ Local Development
 
+### Dev Container (Recommended)
+
+This repo includes a [dev container](https://containers.dev/) configuration for VS Code and GitHub Codespaces. Open the repo in a dev container and everything is pre-installed:
+
+| Tool | Version |
+|------|---------|
+| Node.js | 20 |
+| Python | 3.12 |
+| Azure CLI | Latest (with Bicep) |
+| Azure Developer CLI (azd) | Latest |
+| Docker-in-Docker | Enabled |
+
+**Pre-installed VS Code extensions:** ESLint, Prettier, Tailwind CSS IntelliSense, Python, Black Formatter, Docker, Azure Functions, Azure Account, Bicep
+
+**Forwarded ports:** 3000 (frontend), 3001 (backend)
+
+**Post-create:** `npm install` and Python dependencies are installed automatically.
+
+### Manual Setup
+
 ### 1️⃣ Clone this repository
 ```bash
 git clone https://github.com/ganachan/voice_live_api_gana.git
