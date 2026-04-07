@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: voice-live-api
+metadata:
+  template: voice-live-api
+infra:
+  provider: bicep
+  path: infra
+  module: main
+services:
+  api:
+    project: .
+    language: python
+    host: containerapp
+    docker:
+      path: Dockerfile
+  web:
+    project: .
+    language: ts
+    host: staticwebapp
+    dist: out
+    build:
+      steps:
+        - run: npm install
+        - run: npm run build

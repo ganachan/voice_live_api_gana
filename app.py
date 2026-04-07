@@ -1,227 +1,54 @@
 import argparse
+import asyncio
 import json
 import os
 
 from aiohttp import web
+from aiohttp.web import middleware
 import logging
-import hashlib
-import secrets
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv is optional; env vars can be set directly
+
+from azure.identity.aio import DefaultAzureCredential
 
 logger = logging.getLogger(__name__)
 
-# Password protection settings
-REQUIRED_PASSWORD = "your_passwd"
-# Generate a secret key for session management
-SECRET_KEY = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+# Allowed CORS origins for SWA frontend (from environment)
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "").split(",")
+
+@middleware
+async def cors_middleware(request, handler):
+    """Add CORS headers for allowed SWA origins."""
+    origin = request.headers.get("Origin", "")
+    resp = await handler(request)
+    if origin and any(o.strip() for o in ALLOWED_ORIGINS if o.strip() and origin.startswith(o.strip())):
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return resp
+
+# Azure OpenAI / AI Foundry settings (from environment)
+AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
+AZURE_OPENAI_DEPLOYMENT_NAME = os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-realtime")
+AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2025-05-01-preview")
+
+# Credential for token acquisition (Entra ID / DefaultAzureCredential)
+credential = DefaultAzureCredential()
+COGNITIVE_SERVICES_SCOPE = "https://cognitiveservices.azure.com/.default"
 
 # Minimal backend - no hardcoded config to avoid conflicts
 RETURN_CONFIGS = os.environ.get("RETURN_CONFIGS", "false").lower() == "true"
 
-def hash_password(password):
-    """Hash the password for secure comparison"""
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def is_authenticated(request):
-    """Check if user is authenticated"""
-    session_id = request.cookies.get('session_id')
-    if not session_id:
-        return False
-    
-    # Simple session validation (in production, use proper session storage)
-    expected_session = hashlib.sha256((REQUIRED_PASSWORD + SECRET_KEY).encode()).hexdigest()
-    return session_id == expected_session
-
-async def login_page(request):
-    """Serve the login page"""
-    html = """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Voice-Live API - Demo</title>
-        <style>
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                background: linear-gradient(135deg, #0078D4 0%, #106EBE 100%);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                min-height: 100vh;
-                margin: 0;
-                padding: 20px;
-            }
-            .login-container {
-                background: white;
-                padding: 2rem;
-                border-radius: 12px;
-                box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-                width: 100%;
-                max-width: 400px;
-                text-align: center;
-            }
-            .logo {
-                font-size: 3rem;
-                margin-bottom: 1rem;
-            }
-            h1 {
-                color: #333;
-                margin-bottom: 0.5rem;
-                font-weight: 600;
-                font-size: 2rem;
-            }
-            .subtitle {
-                color: #666;
-                margin-bottom: 2rem;
-                font-size: 0.9rem;
-            }
-            .input-group {
-                margin-bottom: 1.5rem;
-                text-align: left;
-            }
-            label {
-                display: block;
-                margin-bottom: 0.5rem;
-                color: #555;
-                font-weight: 500;
-            }
-            input[type="password"] {
-                width: 100%;
-                padding: 0.75rem;
-                border: 2px solid #e1e5e9;
-                border-radius: 8px;
-                font-size: 1rem;
-                transition: border-color 0.3s ease;
-                box-sizing: border-box;
-            }
-            input[type="password"]:focus {
-                outline: none;
-                border-color: #0078D4;
-            }
-            .login-btn {
-                width: 100%;
-                padding: 0.75rem;
-                background: linear-gradient(135deg, #0078D4 0%, #106EBE 100%);
-                color: white;
-                border: none;
-                border-radius: 8px;
-                font-size: 1rem;
-                font-weight: 600;
-                cursor: pointer;
-                transition: transform 0.2s ease;
-            }
-            .login-btn:hover {
-                transform: translateY(-1px);
-            }
-            .error {
-                color: #e74c3c;
-                margin-top: 1rem;
-                font-size: 0.9rem;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="login-container">
-            <div class="logo">🎙️</div>
-            <h1>Voice-Live API - Demo</h1>
-            <p class="subtitle">Please enter the password to access the voice chat application</p>
-            
-            <form id="loginForm">
-                <div class="input-group">
-                    <label for="password">Password:</label>
-                    <input type="password" id="password" name="password" required autofocus>
-                </div>
-                <button type="submit" class="login-btn">Access Demo</button>
-            </form>
-            
-            <div id="error" class="error" style="display: none;">
-                Incorrect password. Please try again.
-            </div>
-        </div>
-
-        <script>
-            document.getElementById('loginForm').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                const password = document.getElementById('password').value;
-                const errorDiv = document.getElementById('error');
-                
-                try {
-                    const response = await fetch('/authenticate', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ password })
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        // Set session cookie and redirect
-                        document.cookie = `session_id=${result.session_id}; path=/; max-age=86400; SameSite=Strict`;
-                        window.location.href = '/';
-                    } else {
-                        errorDiv.style.display = 'block';
-                        document.getElementById('password').value = '';
-                        document.getElementById('password').focus();
-                    }
-                } catch (error) {
-                    errorDiv.textContent = 'Connection error. Please try again.';
-                    errorDiv.style.display = 'block';
-                }
-            });
-        </script>
-    </body>
-    </html>
-    """
-    return web.Response(text=html, content_type='text/html')
-
-async def authenticate(request):
-    """Handle password authentication"""
-    try:
-        data = await request.json()
-        password = data.get('password', '')
-        
-        if password == REQUIRED_PASSWORD:
-            # Create session ID
-            session_id = hashlib.sha256((REQUIRED_PASSWORD + SECRET_KEY).encode()).hexdigest()
-            return web.Response(
-                text=json.dumps({"success": True, "session_id": session_id}),
-                content_type='application/json'
-            )
-        else:
-            return web.Response(
-                text=json.dumps({"success": False}),
-                content_type='application/json'
-            )
-    except Exception as e:
-        logger.error(f"Authentication error: {e}")
-        return web.Response(
-            text=json.dumps({"success": False}),
-            content_type='application/json',
-            status=400
-        )
-
-async def logout(request):
-    """Handle logout"""
-    response = web.Response(
-        text=json.dumps({"success": True}),
-        content_type='application/json'
-    )
-    response.del_cookie('session_id')
-    return response
-
 async def index(request):
-    """Serve main app or login page"""
-    if not is_authenticated(request):
-        return await login_page(request)
+    """Serve main app."""
     return web.FileResponse("out/index.html")
 
 async def static(request):
-    """Serve static files only if authenticated"""
-    if not is_authenticated(request):
-        return web.Response(status=401, text="Authentication required")
+    """Serve static files."""
     return web.FileResponse("out/" + request.match_info["path_info"])
 
 # Industry-specific scenarios for Voice-Live API Demo
@@ -475,15 +302,33 @@ Always personalize your responses and provide value-driven insights based on the
 }
 
 async def config(request):
-    """Config endpoint - require authentication"""
-    if not is_authenticated(request):
-        return web.Response(status=401, text="Authentication required")
-    
+    """Config endpoint.
+
+    Returns the Azure OpenAI endpoint, a fresh Entra ID bearer token,
+    the deployment name, and any industry scenario configuration.
+    """
     # Return minimal config without hardcoded credentials
     if not RETURN_CONFIGS:
         return web.Response(text="", status=404)
-    
+
+    # Acquire a fresh token via DefaultAzureCredential
+    token = None
+    if AZURE_OPENAI_ENDPOINT:
+        try:
+            access_token = await asyncio.wait_for(
+                credential.get_token(COGNITIVE_SERVICES_SCOPE), timeout=10
+            )
+            token = access_token.token
+        except asyncio.TimeoutError:
+            logger.error("Token acquisition timed out — is 'az login' done?")
+        except Exception as e:
+            logger.error("Failed to acquire token: %s", e)
+
     config = {
+        "endpoint": AZURE_OPENAI_ENDPOINT or None,
+        "token": token,
+        "deployment": AZURE_OPENAI_DEPLOYMENT_NAME,
+        "api_version": AZURE_OPENAI_API_VERSION,
         "industry_scenarios": industry_scenarios,
         "app_title": "Voice-Live API - Demo",
         "hide_sections": {
@@ -495,13 +340,13 @@ async def config(request):
     }
     return web.Response(text=json.dumps(config))
 
-app = web.Application()
+async def on_cleanup(app):
+    """Close the DefaultAzureCredential on shutdown."""
+    await credential.close()
 
-# Public routes (no authentication required)
-app.router.add_post("/authenticate", authenticate)
-app.router.add_post("/logout", logout)
+app = web.Application(middlewares=[cors_middleware])
+app.on_cleanup.append(on_cleanup)
 
-# Protected routes (authentication required)
 app.router.add_get("/", index)
 app.router.add_get("/config", config)
 app.router.add_get("/{path_info:.*}", static)
